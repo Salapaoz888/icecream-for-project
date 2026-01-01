@@ -176,8 +176,9 @@ async function initDatabase() {
 }
 initDatabase();
 
-function getTodayDate() {
-  return new Date().toISOString().split("T")[0];
+// ใช้ en-CA เพื่อให้ได้ format YYYY-MM-DD แต่ระบุ Timezone เป็นไทย
+function getTodayDate() { 
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }); 
 }
 
 // --- API Endpoints ---
@@ -343,7 +344,10 @@ io.on("connection", async (socket) => {
   });
 
   socket.on("place_order", async (orderData, callback) => {
-    const time = new Date().toLocaleTimeString("th-TH");
+  const time = new Date().toLocaleTimeString('th-TH', { 
+    hour12: false, 
+    timeZone: 'Asia/Bangkok' 
+});
     const itemsString = JSON.stringify(orderData.items);
     try {
       // Postgres ใช้ RETURNING id เพื่อเอา ID ล่าสุดกลับมา
@@ -438,3 +442,4 @@ io.on("connection", async (socket) => {
 });
 
 server.listen(3000, () => console.log("Server running on port 3000"));
+
