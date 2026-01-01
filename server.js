@@ -1,10 +1,8 @@
-// server.js (เวอร์ชั่น PostgreSQL)
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const path = require("path");
-// const sqlite3 = require('sqlite3').verbose(); // ❌ เลิกใช้ SQLite
-const { Pool } = require("pg"); // ✅ ใช้ PostgreSQL แทน
+const { Pool } = require("pg"); // ใช้ PostgreSQL
 const bodyParser = require("body-parser");
 const generatePayload = require("promptpay-qr");
 const qrcode = require("qrcode");
@@ -14,6 +12,7 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 // ----------------------------------------------------
+// ⚠️ ตั้งค่าเบอร์ PromptPay ของร้านที่นี่
 const SHOP_PROMPTPAY_ID = "0812345678";
 // ----------------------------------------------------
 
@@ -23,18 +22,17 @@ app.use(express.static(path.join(__dirname, "public")));
 // Database Connection (ใช้ Environment Variable จาก Render)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  // ถ้า run บน localhost เครื่องตัวเอง ต้องใส่ค่า connectionString เอง หรือใช้ .env
-  // ssl: { rejectUnauthorized: false } // บาง Cloud ต้องเปิดตัวนี้
+  // ssl: { rejectUnauthorized: false } // ปลดคอมเมนต์บรรทัดนี้ถ้า Render แจ้งเตือนเรื่อง SSL
 });
 
 console.log("Connecting to PostgreSQL...");
 
-// Initialize Tables & Seed Data (แปลงเป็น Async/Await เพื่อความชัวร์)
+// Initialize Tables & Seed Data
 async function initDatabase() {
   try {
     const client = await pool.connect();
 
-    // 1. Create Tables (เปลี่ยน syntax เป็น PostgreSQL)
+    // 1. Create Tables
     await client.query(`CREATE TABLE IF NOT EXISTS orders (
             id SERIAL PRIMARY KEY, 
             table_no TEXT, 
@@ -176,9 +174,9 @@ async function initDatabase() {
 }
 initDatabase();
 
-// ใช้ en-CA เพื่อให้ได้ format YYYY-MM-DD แต่ระบุ Timezone เป็นไทย
-function getTodayDate() { 
-    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }); 
+// 🔥 FIXED: บังคับให้เป็นเวลาไทย (Asia/Bangkok)
+function getTodayDate() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
 }
 
 // --- API Endpoints ---
@@ -226,7 +224,7 @@ app.get("/api/menu", async (req, res) => {
   }
 });
 
-// QR Gen (ไม่ยุ่งกับ DB)
+// QR Gen
 app.post("/api/generate-qr", (req, res) => {
   const amount = parseFloat(req.body.amount);
   if (!amount || amount <= 0) return res.json({ status: "error" });
@@ -344,13 +342,15 @@ io.on("connection", async (socket) => {
   });
 
   socket.on("place_order", async (orderData, callback) => {
-  const time = new Date().toLocaleTimeString('th-TH', { 
-    hour12: false, 
-    timeZone: 'Asia/Bangkok' 
-});
+    // 🔥 FIXED: แก้ไขเวลาให้เป็น Timezone ไทย (Asia/Bangkok)
+    const time = new Date().toLocaleTimeString("th-TH", {
+      hour12: false,
+      timeZone: "Asia/Bangkok",
+    });
+    const date = getTodayDate(); // ใช้ฟังก์ชันที่แก้แล้วด้านบน
+
     const itemsString = JSON.stringify(orderData.items);
     try {
-      // Postgres ใช้ RETURNING id เพื่อเอา ID ล่าสุดกลับมา
       const res = await pool.query(
         `INSERT INTO orders (table_no, items, total, status, created_at, date) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
         [
@@ -359,7 +359,7 @@ io.on("connection", async (socket) => {
           orderData.totalPrice,
           "pending",
           time,
-          getTodayDate(),
+          date,
         ]
       );
       const newId = res.rows[0].id;
@@ -442,4 +442,3 @@ io.on("connection", async (socket) => {
 });
 
 server.listen(3000, () => console.log("Server running on port 3000"));
-
