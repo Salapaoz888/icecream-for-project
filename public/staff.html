@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kitchen Display</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <script>
+      if (!sessionStorage.getItem("userRole"))
+        window.location.href = "login.html";
+    </script>
+  </head>
+  <body class="staff-mode">
+    <div class="header-bar">
+      <div><h1>🧑‍🍳 Kitchen Monitor</h1></div>
+      <div>
+        <button class="btn-stock" onclick="openStockModal()">📦 ของหมด</button>
+        <a
+          href="login.html"
+          onclick="sessionStorage.clear()"
+          style="color: white; margin-left: 15px"
+          >Logout</a
+        >
+      </div>
+    </div>
+    <div class="tabs">
+      <button
+        class="tab-btn active"
+        onclick="switchTab('active')"
+        id="tabActive"
+      >
+        ออเดอร์เข้า
+      </button>
+      <button class="tab-btn" onclick="switchTab('history')" id="tabHistory">
+        ทำเสร็จแล้ว
+      </button>
+    </div>
+    <div class="order-container" id="orderList">Loading...</div>
+
+    <div class="modal-overlay" id="stockModal">
+      <div class="modal-content">
+        <div style="display: flex; justify-content: space-between">
+          <h2>📦 เช็คของหมด</h2>
+          <button class="btn-close" onclick="closeStockModal()">&times;</button>
+        </div>
+        <h3>รสชาติ</h3>
+        <div class="stock-grid" id="stockFlavorList"></div>
+        <h3>ท็อปปิ้ง</h3>
+        <div class="stock-grid" id="stockToppingList"></div>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const socket = io();
+      let flavorsData = {},
+        toppingsData = {},
+        currentStock = {},
+        currentTab = "active";
+
+      // --- Click Outside to Close Logic ---
+      window.onclick = function (event) {
+        if (event.target.classList.contains("modal-overlay")) {
+          closeStockModal();
+        }
+      };
+
+      async function init() {
+        const res = await fetch("/api/menu");
+        const data = await res.json();
+        data.flavors.forEach((f) => (flavorsData[f.id] = f));
+        data.toppings.forEach((t) => (toppingsData[t.id] = t));
+        renderStockItems(data.flavors, data.toppings);
+        socket.emit("request_pending_orders");
+      }
+      init();
+
+      function switchTab(t) {
+        currentTab = t;
+        document.getElementById("tabActive").className =
+          t === "active" ? "tab-btn active" : "tab-btn";
+        document.getElementById("tabHistory").className =
+          t === "history" ? "tab-btn active" : "tab-btn";
+        if (t === "active") socket.emit("request_pending_orders");
+        else socket.emit("request_admin_data");
+      }
+
+      socket.on("load_current_orders", (orders) => {
+        if (currentTab === "active") renderOrders(orders, false);
+      });
+      socket.on("new_order_notification", () => {
+        if (currentTab === "active") socket.emit("request_pending_orders");
+      });
+      socket.on("admin_data_response", (data) => {
+        if (currentTab === "history") renderOrders(data.history, true);
+      });
+
+      function renderOrders(orders, isHistory) {
+        const c = document.getElementById("orderList");
+        c.innerHTML = "";
+        if (!orders.length)
+          return (c.innerHTML =
+            '<div style="grid-column:1/-1;text-align:center;">ไม่มีรายการ</div>');
+        orders.forEach((o) => {
+          const items = o.items
+            .map((i) => {
+              const f = i.selectedFlavors
+                .map((id) => flavorsData[id]?.name || id)
+                .join(", ");
+              const t = i.selectedToppings
+                .map((id) => toppingsData[id]?.name || id)
+                .join(", ");
+              return `<div class="order-item"><span class="item-name">${
+                i.name
+              }</span><div>รส: ${f}</div>${t ? `<div>+ ${t}</div>` : ""}${
+                i.note !== "-" ? `<div class="item-note">${i.note}</div>` : ""
+              }</div>`;
+            })
+            .join("");
+          c.innerHTML += `<div class="order-card" style="${
+            isHistory ? "border-left-color:gray" : ""
+          }"><div class="card-header"><span class="table-num">${
+            o.table
+          }</span><span>${
+            o.timestamp
+          }</span></div><div class="card-body">${items}</div><div class="card-footer">${
+            isHistory
+              ? `<button class="btn-undo" onclick="socket.emit('undo_order', ${o.id})">Undo</button>`
+              : `<button class="btn-serve" onclick="socket.emit('complete_order', ${o.id})">✅ เสร็จแล้ว</button>`
+          }</div></div>`;
+        });
+      }
+
+      // Stock Logic
+      socket.on("stock_update", (m) => {
+        currentStock = m;
+        updateStockUI();
+      });
+      function updateStockUI() {
+        document.querySelectorAll(".stock-item").forEach((el) => {
+          const avail = currentStock[el.dataset.id] !== false;
+          el.className = `stock-item ${avail ? "active" : "inactive"}`;
+        });
+      }
+      function renderStockItems(fList, tList) {
+        const fc = document.getElementById("stockFlavorList");
+        fc.innerHTML = "";
+
+        fList.forEach((f) => {
+          const id = `f-${f.id}`;
+          // 🔥 เช็คสถานะทันที: ถ้าไม่มีข้อมูล ให้ถือว่า "มีของ" (true) ไว้ก่อน
+          const isAvailable = currentStock[id] !== false;
+          const statusClass = isAvailable ? "active" : "inactive";
+
+          // ใส่ class active/inactive ลงไปเลยตั้งแต่บรรทัดนี้
+          fc.innerHTML += `<div class="stock-item ${statusClass}" data-id="${id}" onclick="toggleStock('${id}')">${f.name}</div>`;
+        });
+
+        const tc = document.getElementById("stockToppingList");
+        tc.innerHTML = "";
+
+        tList.forEach((t) => {
+          const id = `t-${t.id}`;
+          const isAvailable = currentStock[id] !== false;
+          const statusClass = isAvailable ? "active" : "inactive";
+
+          tc.innerHTML += `<div class="stock-item ${statusClass}" data-id="${id}" onclick="toggleStock('${id}')">${t.name}</div>`;
+        });
+      }
+      function toggleStock(id) {
+        socket.emit("toggle_stock", {
+          itemId: id,
+          available: currentStock[id] === false,
+        });
+      }
+      function openStockModal() {
+        document.getElementById("stockModal").style.display = "flex";
+      }
+      function closeStockModal() {
+        document.getElementById("stockModal").style.display = "none";
+      }
+    </script>
+  </body>
+</html>

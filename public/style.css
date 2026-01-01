@@ -1,0 +1,563 @@
+/* =========================================
+   1. GLOBAL VARIABLES & RESET
+   ========================================= */
+:root {
+  --primary: #ff6b81;
+  --primary-hover: #ff4757;
+  --secondary: #7bed9f;
+  --bg-body: #f7f1e3;
+  --card-bg: #ffffff;
+  --text-main: #2f3542;
+  --text-sub: #57606f;
+  --staff-bg: #2d3436;
+  --admin-sidebar: #1e272e;
+  --success: #2ed573;
+  --warning: #ffa502;
+  --danger: #ff4757;
+  --radius-l: 24px;
+  --radius-m: 16px;
+  --radius-s: 8px;
+  --shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  font-family: "Kanit", sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-body);
+  color: var(--text-main);
+}
+button {
+  font-family: "Kanit", sans-serif;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+button:active {
+  transform: scale(0.95);
+}
+
+/* =========================================
+   2. CUSTOMER UI
+   ========================================= */
+header {
+  background: white;
+  padding: 20px 25px;
+  border-radius: 0 0 var(--radius-l) var(--radius-l);
+  box-shadow: var(--shadow);
+  position: sticky;
+  top: 0;
+  z-index: 90;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.brand-title {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.container {
+  padding: 25px 20px 100px 20px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.product-card {
+  background: white;
+  border-radius: var(--radius-m);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  transition: transform 0.2s;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+.product-card:hover {
+  transform: translateY(-5px);
+  border-color: var(--primary);
+}
+
+.product-img {
+  width: 100%;
+  height: 140px;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-color: #eee;
+  transition: transform 0.3s;
+}
+
+.product-info {
+  padding: 15px;
+}
+.product-name {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 5px;
+}
+.product-price {
+  color: var(--primary);
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+
+/* Modals */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(5px);
+  display: none;
+  z-index: 200;
+  align-items: flex-end;
+  justify-content: center;
+}
+body.staff-mode .modal-overlay,
+body.admin-mode .modal-overlay {
+  align-items: center;
+}
+
+.modal-overlay.active {
+  display: flex;
+}
+.modal-content {
+  background: white;
+  width: 100%;
+  border-radius: var(--radius-l) var(--radius-l) 0 0;
+  padding: 30px 25px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+body.staff-mode .modal-content {
+  width: 500px;
+  border-radius: var(--radius-m);
+  animation: popIn 0.3s;
+}
+@keyframes popIn {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  color: var(--text-sub);
+  float: right;
+  margin-top: -10px;
+}
+.flavor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.flavor-btn {
+  border: 2px solid #f1f2f6;
+  background: white;
+  padding: 12px;
+  border-radius: var(--radius-m);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+.flavor-btn.selected {
+  border-color: var(--primary);
+  background-color: #ffeef0;
+  color: var(--primary);
+  font-weight: bold;
+}
+.flavor-btn.disabled {
+  background: #f1f2f6 !important;
+  opacity: 0.5;
+  pointer-events: none;
+}
+.flavor-color {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+/* 🔥 เพิ่ม CSS สำหรับไอคอนสีและรูปท็อปปิ้ง */
+.color-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 10px;
+  border: 1px solid #ddd;
+  vertical-align: middle;
+}
+.topping-img-small {
+  width: 30px;
+  height: 30px;
+  border-radius: 4px;
+  margin-right: 10px;
+  vertical-align: middle;
+  object-fit: cover;
+  background: #eee;
+}
+.topping-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+}
+.topping-option img {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.bottom-cart {
+  position: fixed;
+  bottom: 25px;
+  left: 20px;
+  right: 20px;
+  background: var(--text-main);
+  color: white;
+  padding: 15px 25px;
+  border-radius: 50px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+}
+.btn-track-order {
+  position: fixed;
+  top: 18px;
+  right: 20px;
+  background: white;
+  color: var(--text-main);
+  padding: 8px 16px;
+  border-radius: 20px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  font-size: 0.85rem;
+  font-weight: bold;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #eee;
+}
+.btn-primary {
+  width: 100%;
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 18px;
+  border-radius: var(--radius-m);
+  font-size: 1.1rem;
+  font-weight: bold;
+  margin-top: 25px;
+}
+
+#paymentSection {
+  border: 2px solid #e1e5ea;
+  border-radius: 12px;
+  margin-bottom: 15px;
+  padding: 20px;
+  text-align: center;
+}
+#qrImage {
+  border: 2px solid #003d6b;
+  border-radius: 8px;
+  padding: 10px;
+  background: white;
+  width: 200px;
+  height: 200px;
+  display: block;
+  margin: 0 auto;
+}
+
+/* =========================================
+   3. STAFF UI (Dark Mode)
+   ========================================= */
+body.staff-mode {
+  background-color: var(--staff-bg);
+  color: white;
+}
+body.staff-mode .header-bar {
+  background: #1e272e;
+  padding: 20px 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.order-container {
+  padding: 30px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 25px;
+}
+.order-card {
+  background: white;
+  color: var(--text-main);
+  border-radius: var(--radius-m);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+  border-left: 15px solid var(--warning);
+  display: flex;
+  flex-direction: column;
+}
+.card-header {
+  background: #f1f2f6;
+  padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid #e1e2e6;
+}
+.table-num {
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: var(--danger);
+}
+.card-body {
+  padding: 0;
+  flex-grow: 1;
+}
+.order-item {
+  padding: 15px 20px;
+  border-bottom: 1px dashed #ccc;
+}
+.item-note {
+  background: #ffeaa7;
+  color: #d63031;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: bold;
+  margin-top: 6px;
+  display: inline-block;
+}
+.card-footer {
+  padding: 15px;
+  background: #fff;
+}
+.btn-serve {
+  background: var(--success);
+  color: white;
+  padding: 15px;
+  border-radius: var(--radius-s);
+  font-size: 1.2rem;
+  font-weight: bold;
+  width: 100%;
+  border: none;
+}
+.btn-undo {
+  background: #b2bec3;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: var(--radius-s);
+  border: none;
+  color: white;
+}
+.btn-stock {
+  background: #0984e3;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 30px;
+  font-weight: bold;
+  border: none;
+  margin-left: 20px;
+}
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin-left: 30px;
+  margin-bottom: 10px;
+}
+.tab-btn {
+  background: #444;
+  color: #ccc;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+}
+.tab-btn.active {
+  background: var(--warning);
+  color: white;
+  font-weight: bold;
+}
+.stock-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  margin-top: 20px;
+}
+.stock-item {
+  padding: 15px;
+  border-radius: 8px;
+  text-align: center;
+  font-weight: bold;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+.stock-item.active {
+  background: #dff9fb;
+  border-color: var(--success);
+  color: var(--success);
+}
+.stock-item.inactive {
+  background: #ffeaa7;
+  border-color: var(--danger);
+  color: var(--danger);
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+/* =========================================
+   4. ADMIN DASHBOARD
+   ========================================= */
+.admin-layout {
+  display: flex;
+  min-height: 100vh;
+  font-family: "Kanit";
+}
+.sidebar {
+  width: 260px;
+  background: var(--admin-sidebar);
+  color: #ecf0f1;
+  display: flex;
+  flex-direction: column;
+}
+.sidebar-header {
+  padding: 30px 20px;
+  font-size: 1.5rem;
+  font-weight: bold;
+  background: rgba(0, 0, 0, 0.2);
+  text-align: center;
+}
+.nav-links {
+  list-style: none;
+  padding: 0;
+  margin: 20px 0;
+}
+.nav-item {
+  padding: 18px 25px;
+  cursor: pointer;
+  border-left: 5px solid transparent;
+  transition: 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.nav-item.active {
+  background: rgba(255, 255, 255, 0.1);
+  border-left-color: var(--primary);
+  font-weight: bold;
+}
+.main-content {
+  flex-grow: 1;
+  background: #f1f2f6;
+  padding: 40px;
+  overflow-y: auto;
+}
+.stat-card {
+  background: white;
+  padding: 30px;
+  border-radius: var(--radius-m);
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.05);
+  text-align: center;
+}
+.stat-value {
+  font-size: 3rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+.table-responsive {
+  background: white;
+  border-radius: var(--radius-m);
+  padding: 25px;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.05);
+  margin-top: 20px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th,
+td {
+  padding: 15px;
+  border-bottom: 1px solid #dfe6e9;
+  text-align: left;
+}
+.form-inline {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.input-text {
+  flex-grow: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+.btn-green {
+  background: var(--success);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+}
+.btn-red {
+  background: var(--danger);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+}
+.btn-blue {
+  background: #3498db;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+.list-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+  align-items: center;
+}
+.hidden {
+  display: none !important;
+}

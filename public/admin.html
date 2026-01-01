@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Panel</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <script>
+      if (sessionStorage.getItem("userRole") !== "admin")
+        window.location.href = "login.html";
+    </script>
+  </head>
+  <body class="admin-mode">
+    <div class="admin-layout">
+      <aside class="sidebar">
+        <div class="sidebar-header">🍦 Admin Panel</div>
+        <ul class="nav-links">
+          <li
+            class="nav-item active"
+            onclick="show('dashboard')"
+            id="nav-dashboard"
+          >
+            📊 Dashboard
+          </li>
+          <li class="nav-item" onclick="show('menu')" id="nav-menu">
+            📝 Manage Menu
+          </li>
+        </ul>
+        <div
+          style="
+            padding: 20px;
+            margin-top: auto;
+            cursor: pointer;
+            background: #c0392b;
+            text-align: center;
+          "
+          onclick="sessionStorage.clear();window.location.href='login.html'"
+        >
+          Logout
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <div id="sec-dashboard">
+          <div class="stat-card">
+            <div style="color: #888">Sales Today</div>
+            <div class="stat-value" id="totalSales">0.-</div>
+          </div>
+          <div class="table-responsive">
+            <h3>History</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Items</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody id="historyTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="sec-menu" class="hidden">
+          <div class="table-responsive">
+            <h3>🍦 Flavors</h3>
+            <div class="form-inline">
+              <input
+                id="newFName"
+                class="input-text"
+                placeholder="Name"
+              /><input type="color" id="newFColor" /><button
+                class="btn-green"
+                onclick="addItem('flavor')"
+              >
+                Add
+              </button>
+            </div>
+            <div id="listFlavor"></div>
+          </div>
+          <div class="table-responsive" style="margin-top: 20px">
+            <h3>🍒 Toppings</h3>
+            <div class="form-inline">
+              <input
+                id="newTName"
+                class="input-text"
+                placeholder="Name"
+                style="flex: 2"
+              />
+              <input
+                id="newTPrice"
+                type="number"
+                class="input-text"
+                value="10"
+                style="flex: 1"
+              />
+              <input
+                id="newTImg"
+                class="input-text"
+                placeholder="Image URL (Optional)"
+                style="flex: 2"
+              />
+              <button class="btn-green" onclick="addItem('topping')">
+                Add
+              </button>
+            </div>
+            <div id="listTopping"></div>
+          </div>
+          <div class="table-responsive" style="margin-top: 20px">
+            <h3>📋 Product Categories</h3>
+            <div
+              style="
+                background: #f8f9fa;
+                padding: 15px;
+                border-radius: 8px;
+                margin-bottom: 15px;
+              "
+            >
+              <h4>+ Add New Product</h4>
+              <div class="form-inline">
+                <input
+                  id="newCName"
+                  class="input-text"
+                  placeholder="Name"
+                  style="flex: 2"
+                />
+                <input
+                  id="newCPrice"
+                  type="number"
+                  class="input-text"
+                  placeholder="Price"
+                  style="flex: 1"
+                />
+                <input
+                  id="newCScoops"
+                  type="number"
+                  class="input-text"
+                  placeholder="Scoops"
+                  style="flex: 1"
+                  value="1"
+                />
+              </div>
+              <input
+                id="newCImg"
+                class="input-text"
+                placeholder="Image URL (https://...)"
+                style="width: 100%; margin-top: 10px"
+              />
+              <button
+                class="btn-green"
+                onclick="addCategory()"
+                style="width: 100%; margin-top: 10px"
+              >
+                Save Product
+              </button>
+            </div>
+            <div id="listCat"></div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const socket = io();
+      let menuData = {};
+
+      function show(id) {
+        document
+          .querySelectorAll("main > div")
+          .forEach((d) => d.classList.add("hidden"));
+        document
+          .querySelectorAll(".nav-item")
+          .forEach((n) => n.classList.remove("active"));
+        document.getElementById(`sec-${id}`).classList.remove("hidden");
+        document.getElementById(`nav-${id}`).classList.add("active");
+        if (id === "menu") loadMenu();
+      }
+
+      socket.emit("request_admin_data");
+      socket.on("admin_data_response", (data) => {
+        document.getElementById("totalSales").innerText =
+          data.totalToday + ".-";
+        const h = document.getElementById("historyTable");
+        h.innerHTML = "";
+        data.history.forEach((o) => {
+          const i = o.items.map((x) => x.name).join(", ");
+          h.innerHTML += `<tr><td>${o.created_at}</td><td>${i}</td><td>${o.total}.-</td></tr>`;
+        });
+      });
+
+      socket.on("menu_updated", () => {
+        if (!document.getElementById("sec-menu").classList.contains("hidden"))
+          loadMenu();
+      });
+
+      async function loadMenu() {
+        const res = await fetch("/api/menu");
+        menuData = await res.json();
+        renderList("Flavor", menuData.flavors);
+        renderList("Topping", menuData.toppings);
+        renderCats(menuData.categories);
+      }
+
+      // 🔥 แก้ไขฟังก์ชัน renderList ใหม่ (แยก Flavor กับ Topping)
+      function renderList(type, list) {
+        const c = document.getElementById(`list${type}`);
+        c.innerHTML = "";
+
+        list.forEach((i) => {
+          if (type === "Flavor") {
+            // ส่วนของ Flavor (แสดงแบบเดิม)
+            const icon = `<span class="color-icon" style="background:${i.color}"></span>`;
+            c.innerHTML += `
+                    <div class="list-item">
+                        <div>${icon}<span>${i.name}</span></div>
+                        <button class="btn-red" onclick="delItem('flavor', ${i.id})">Delete</button>
+                    </div>`;
+          } else if (type === "Topping") {
+            // ส่วนของ Topping (แสดงแบบฟอร์มแก้ไข)
+            const img = i.img_url || "";
+            c.innerHTML += `
+                    <div class="list-item" style="flex-direction:column; align-items:flex-start; background:white; border:1px solid #eee; margin-bottom:10px; padding:15px;">
+                        <div style="display:flex; width:100%; gap:15px; align-items: center;">
+                            <div style="width:50px; height:50px; background:url('${img}') center/cover no-repeat #eee; border-radius:4px; flex-shrink:0;"></div>
+                            
+                            <div style="flex-grow:1; display:flex; gap:10px; flex-wrap:wrap;">
+                                <input id="tn-${i.id}" value="${i.name}" class="input-text" style="flex:2; min-width:120px; font-weight:bold;" placeholder="Name">
+                                <div style="display:flex; align-items:center; gap:5px;">
+                                    <small>฿</small>
+                                    <input id="tp-${i.id}" type="number" value="${i.price}" class="input-text" style="width:70px;" placeholder="Price">
+                                </div>
+                            </div>
+                        </div>
+
+                        <input id="ti-${i.id}" value="${img}" class="input-text" style="width:100%; font-size:0.8rem; color:#888; margin-top:8px;" placeholder="Image URL (Optional)">
+
+                        <div style="display:flex; gap:10px; justify-content:flex-end; width:100%; margin-top:10px;">
+                            <button class="btn-blue" onclick="updTopping(${i.id})">Save</button>
+                            <button class="btn-red" onclick="delItem('topping', ${i.id})">Delete</button>
+                        </div>
+                    </div>`;
+          }
+        });
+      }
+
+      // 🔥 เพิ่มฟังก์ชันบันทึก Topping
+      async function updTopping(id) {
+        const name = document.getElementById(`tn-${id}`).value;
+        const price = document.getElementById(`tp-${id}`).value;
+        const img_url = document.getElementById(`ti-${id}`).value;
+
+        if (!name || !price) return alert("Name and Price are required");
+
+        await fetch("/api/admin/topping/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, name, price, img_url }),
+        });
+        alert("Topping updated!");
+      }
+
+      function renderCats(list) {
+        const c = document.getElementById("listCat");
+        c.innerHTML = "";
+        list.forEach((i) => {
+          const img = i.img_url || "";
+          c.innerHTML += `
+                    <div class="list-item" style="flex-direction:column; align-items:flex-start; background:white; border:1px solid #eee; margin-bottom:10px;">
+                        <div style="display:flex; width:100%; gap:15px;">
+                            <div style="width:80px; height:80px; background:url('${img}') center/cover no-repeat #eee; border-radius:6px;"></div>
+                            <div style="flex-grow:1;">
+                                <input id="cn-${i.id}" value="${i.name}" class="input-text" style="font-weight:bold; width:100%; margin-bottom:5px;">
+                                <div style="display:flex; gap:5px;">
+                                    Price: <input id="cp-${i.id}" type="number" value="${i.price}" class="input-text" style="width:60px;">
+                                    Scoops: <input id="cs-${i.id}" type="number" value="${i.max_scoops}" class="input-text" style="width:50px;">
+                                </div>
+                                <input id="ci-${i.id}" value="${img}" class="input-text" style="width:100%; font-size:0.8rem; margin-top:5px; color:#888;">
+                            </div>
+                        </div>
+                        <div style="display:flex; justify-content:flex-end; gap:10px; width:100%; margin-top:10px;">
+                            <button class="btn-blue" onclick="updCat(${i.id})">Update</button>
+                            <button class="btn-red" onclick="delCat(${i.id})">Delete</button>
+                        </div>
+                    </div>`;
+        });
+      }
+
+      async function addItem(type) {
+        const name = document.getElementById(
+          type === "flavor" ? "newFName" : "newTName"
+        ).value;
+        let body = { name };
+        if (type === "flavor") {
+          body.color = document.getElementById("newFColor").value;
+        } else {
+          body.price = document.getElementById("newTPrice").value;
+          // 🔥 รับค่า img_url สำหรับท็อปปิ้ง
+          body.img_url = document.getElementById("newTImg").value;
+        }
+        await fetch(`/api/admin/${type}/add`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (type === "topping") document.getElementById("newTImg").value = ""; // Clear input
+      }
+      async function delItem(type, id) {
+        if (confirm("Del?"))
+          await fetch(`/api/admin/${type}/delete`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id }),
+          });
+      }
+
+      async function addCategory() {
+        const name = document.getElementById("newCName").value;
+        const price = document.getElementById("newCPrice").value;
+        const max_scoops = document.getElementById("newCScoops").value;
+        const img_url = document.getElementById("newCImg").value;
+        if (!name || !price) return alert("Name & Price required");
+        await fetch("/api/admin/category/add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, price, max_scoops, img_url }),
+        });
+        document.getElementById("newCName").value = "";
+        document.getElementById("newCPrice").value = "";
+        document.getElementById("newCImg").value = "";
+      }
+      async function updCat(id) {
+        const name = document.getElementById(`cn-${id}`).value;
+        const price = document.getElementById(`cp-${id}`).value;
+        const max_scoops = document.getElementById(`cs-${id}`).value;
+        const img_url = document.getElementById(`ci-${id}`).value;
+        await fetch("/api/admin/category/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, name, price, max_scoops, img_url }),
+        });
+        alert("Saved");
+      }
+      async function delCat(id) {
+        if (confirm("Delete this product?"))
+          await fetch("/api/admin/category/delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id }),
+          });
+      }
+    </script>
+  </body>
+</html>
