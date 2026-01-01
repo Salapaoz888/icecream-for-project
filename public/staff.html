@@ -27,18 +27,20 @@
         >
       </div>
     </div>
+
     <div class="tabs">
       <button
         class="tab-btn active"
         onclick="switchTab('active')"
         id="tabActive"
       >
-        ออเดอร์เข้า
+        ⏳ ออเดอร์เข้า
       </button>
       <button class="tab-btn" onclick="switchTab('history')" id="tabHistory">
-        ทำเสร็จแล้ว
+        ✅ ทำเสร็จแล้ว
       </button>
     </div>
+
     <div class="order-container" id="orderList">Loading...</div>
 
     <div class="modal-overlay" id="stockModal">
@@ -62,22 +64,32 @@
         currentStock = {},
         currentTab = "active";
 
-      // --- Click Outside to Close Logic ---
       window.onclick = function (event) {
-        if (event.target.classList.contains("modal-overlay")) {
-          closeStockModal();
-        }
+        if (event.target.classList.contains("modal-overlay")) closeStockModal();
       };
 
       async function init() {
         const res = await fetch("/api/menu");
         const data = await res.json();
+        flavorsData = {};
+        toppingsData = {};
         data.flavors.forEach((f) => (flavorsData[f.id] = f));
         data.toppings.forEach((t) => (toppingsData[t.id] = t));
         renderStockItems(data.flavors, data.toppings);
-        socket.emit("request_pending_orders");
+
+        // โหลดข้อมูลครั้งแรก
+        refreshData();
       }
       init();
+
+      // 🔥 Realtime Update: เมื่อ Server บอกให้รีเฟรช ให้โหลดข้อมูลใหม่ตาม Tab ที่เปิดอยู่ทันที
+      socket.on("force_refresh_staff", () => {
+        refreshData();
+      });
+
+      socket.on("menu_updated", () => {
+        init();
+      });
 
       function switchTab(t) {
         currentTab = t;
@@ -85,15 +97,16 @@
           t === "active" ? "tab-btn active" : "tab-btn";
         document.getElementById("tabHistory").className =
           t === "history" ? "tab-btn active" : "tab-btn";
-        if (t === "active") socket.emit("request_pending_orders");
+        refreshData();
+      }
+
+      function refreshData() {
+        if (currentTab === "active") socket.emit("request_pending_orders");
         else socket.emit("request_admin_data");
       }
 
       socket.on("load_current_orders", (orders) => {
         if (currentTab === "active") renderOrders(orders, false);
-      });
-      socket.on("new_order_notification", () => {
-        if (currentTab === "active") socket.emit("request_pending_orders");
       });
       socket.on("admin_data_response", (data) => {
         if (currentTab === "history") renderOrders(data.history, true);
@@ -102,10 +115,13 @@
       function renderOrders(orders, isHistory) {
         const c = document.getElementById("orderList");
         c.innerHTML = "";
+
         if (!orders.length)
           return (c.innerHTML =
-            '<div style="grid-column:1/-1;text-align:center;">ไม่มีรายการ</div>');
+            '<div style="grid-column:1/-1;text-align:center; color:#888; margin-top:50px;">ไม่มีรายการ</div>');
+
         orders.forEach((o) => {
+          // สร้างรายการสินค้า
           const items = o.items
             .map((i) => {
               const f = i.selectedFlavors
@@ -114,28 +130,81 @@
               const t = i.selectedToppings
                 .map((id) => toppingsData[id]?.name || id)
                 .join(", ");
-              return `<div class="order-item"><span class="item-name">${
-                i.name
-              }</span><div>รส: ${f}</div>${t ? `<div>+ ${t}</div>` : ""}${
-                i.note !== "-" ? `<div class="item-note">${i.note}</div>` : ""
-              }</div>`;
+              return `
+                        <div class="order-item">
+                            <span class="item-name">${i.name}</span>
+                            <div style="font-size:0.9rem; color:#666;">รส: ${f}</div>
+                            ${
+                              t
+                                ? `<div style="font-size:0.9rem; color:#666;">+ ${t}</div>`
+                                : ""
+                            }
+                            ${
+                              i.note
+                                ? `<div class="item-note">${i.note}</div>`
+                                : ""
+                            }
+                        </div>`;
             })
             .join("");
-          c.innerHTML += `<div class="order-card" style="${
-            isHistory ? "border-left-color:gray" : ""
-          }"><div class="card-header"><span class="table-num">${
-            o.table
-          }</span><span>${
-            o.timestamp
-          }</span></div><div class="card-body">${items}</div><div class="card-footer">${
-            isHistory
-              ? `<button class="btn-undo" onclick="socket.emit('undo_order', ${o.id})">Undo</button>`
-              : `<button class="btn-serve" onclick="socket.emit('complete_order', ${o.id})">✅ เสร็จแล้ว</button>`
-          }</div></div>`;
+
+          // 🔥 ปุ่มจัดการ (Active vs History)
+          let buttons = "";
+          if (isHistory) {
+            // Tab History: มีปุ่ม Undo
+            buttons = `<button class="btn-undo" onclick="undoOrder(${o.id})">↩️ ดึงกลับ (Undo)</button>`;
+          } else {
+            // Tab Active: มีปุ่ม เสร็จแล้ว / แก้ไข / ลบ
+            buttons = `
+                        <div style="display:flex; gap:10px; margin-top:10px;">
+                            <button class="btn-blue" onclick="editOrder(${o.id}, '${o.table_no}')" style="flex:1; padding:10px;">✏️ แก้ไข</button>
+                            <button class="btn-red" onclick="deleteOrder(${o.id})" style="flex:1; padding:10px;">🗑️ ลบ</button>
+                        </div>
+                        <button class="btn-serve" onclick="completeOrder(${o.id})" style="margin-top:10px;">✅ เสร็จแล้ว</button>
+                    `;
+          }
+
+          c.innerHTML += `
+                    <div class="order-card" style="${
+                      isHistory ? "border-left-color:gray; opacity:0.8;" : ""
+                    }">
+                        <div class="card-header">
+                            <span class="table-num">${
+                              o.table_no || o.table
+                            }</span>
+                            <span style="font-size:0.9rem;">${
+                              o.timestamp || o.created_at
+                            }</span>
+                        </div>
+                        <div class="card-body">${items}</div>
+                        <div class="card-footer">${buttons}</div>
+                    </div>`;
         });
       }
 
-      // Stock Logic
+      // --- Actions ---
+      function completeOrder(id) {
+        socket.emit("complete_order", id);
+      }
+      function undoOrder(id) {
+        socket.emit("undo_order", id);
+      }
+
+      function deleteOrder(id) {
+        if (confirm("ยืนยันลบออเดอร์นี้? (กู้คืนไม่ได้)")) {
+          socket.emit("delete_order", id);
+        }
+      }
+
+      function editOrder(id, oldTable) {
+        // ตัวอย่าง: แก้ไขเลขโต๊ะ (ถ้าจะแก้รายการอาหารต้องทำ UI ซับซ้อนกว่านี้)
+        const newTable = prompt("แก้ไขเลขโต๊ะ:", oldTable);
+        if (newTable && newTable !== oldTable) {
+          socket.emit("edit_order_info", { id: id, table: newTable });
+        }
+      }
+
+      // --- Stock Logic (เหมือนเดิม) ---
       socket.on("stock_update", (m) => {
         currentStock = m;
         updateStockUI();
@@ -149,26 +218,19 @@
       function renderStockItems(fList, tList) {
         const fc = document.getElementById("stockFlavorList");
         fc.innerHTML = "";
-
         fList.forEach((f) => {
           const id = `f-${f.id}`;
-          // 🔥 เช็คสถานะทันที: ถ้าไม่มีข้อมูล ให้ถือว่า "มีของ" (true) ไว้ก่อน
           const isAvailable = currentStock[id] !== false;
-          const statusClass = isAvailable ? "active" : "inactive";
-
-          // ใส่ class active/inactive ลงไปเลยตั้งแต่บรรทัดนี้
-          fc.innerHTML += `<div class="stock-item ${statusClass}" data-id="${id}" onclick="toggleStock('${id}')">${f.name}</div>`;
+          const status = isAvailable ? "active" : "inactive";
+          fc.innerHTML += `<div class="stock-item ${status}" data-id="${id}" onclick="toggleStock('${id}')">${f.name}</div>`;
         });
-
         const tc = document.getElementById("stockToppingList");
         tc.innerHTML = "";
-
         tList.forEach((t) => {
           const id = `t-${t.id}`;
           const isAvailable = currentStock[id] !== false;
-          const statusClass = isAvailable ? "active" : "inactive";
-
-          tc.innerHTML += `<div class="stock-item ${statusClass}" data-id="${id}" onclick="toggleStock('${id}')">${t.name}</div>`;
+          const status = isAvailable ? "active" : "inactive";
+          tc.innerHTML += `<div class="stock-item ${status}" data-id="${id}" onclick="toggleStock('${id}')">${t.name}</div>`;
         });
       }
       function toggleStock(id) {
