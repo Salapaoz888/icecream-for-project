@@ -11,8 +11,10 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// ตั้งค่า PromptPay ID (เบอร์โทร หรือ เลข ปชช)
+// ----------------------------------------------------
+// ⚠️ ตั้งค่าเบอร์ PromptPay ของร้านที่นี่
 const SHOP_PROMPTPAY_ID = "0812345678";
+// ----------------------------------------------------
 
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public")));
@@ -23,15 +25,18 @@ const db = new sqlite3.Database("./icecream_shop.db", (err) => {
   console.log("Connected to Database");
 });
 
+// Initialize Tables & Seed Data
 db.serialize(() => {
   // 1. Orders
   db.run(
     `CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT, table_no TEXT, items TEXT, total REAL, status TEXT, created_at TEXT, date TEXT)`
   );
+
   // 2. Stock
   db.run(
     `CREATE TABLE IF NOT EXISTS stock (item_id TEXT PRIMARY KEY, is_available INTEGER)`
   );
+
   // 3. Users
   db.run(
     `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password TEXT, role TEXT)`
@@ -44,7 +49,7 @@ db.serialize(() => {
   db.run(
     `CREATE TABLE IF NOT EXISTS flavors (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, color TEXT, is_available INTEGER DEFAULT 1)`
   );
-  // 🔥 แก้ไขบรรทัดนี้: เพิ่ม img_url ในตาราง toppings
+  // เพิ่ม img_url ในตาราง toppings
   db.run(
     `CREATE TABLE IF NOT EXISTS toppings (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, price INTEGER, img_url TEXT, is_available INTEGER DEFAULT 1)`
   );
@@ -65,10 +70,11 @@ db.serialize(() => {
     }
   });
 
-  // Seed Menu (ข้อมูลตัวอย่าง)
+  // Seed Menu Data
   db.get("SELECT count(*) as count FROM categories", (err, row) => {
     if (row.count === 0) {
       console.log("Seeding menu data...");
+
       // Flavors
       const f = db.prepare("INSERT INTO flavors (name, color) VALUES (?, ?)");
       [
@@ -81,7 +87,7 @@ db.serialize(() => {
       ].forEach((i) => f.run(i));
       f.finalize();
 
-      // Toppings (ตัวอย่างแบบมีรูปและไม่มีรูป)
+      // Toppings (พร้อมรูปตัวอย่าง)
       const t = db.prepare(
         "INSERT INTO toppings (name, price, img_url) VALUES (?, ?, ?)"
       );
@@ -140,7 +146,7 @@ function getTodayDate() {
   return new Date().toISOString().split("T")[0];
 }
 
-// --- API Endpoints ---
+// --- REST API Endpoints ---
 
 // Login
 app.post("/api/login", (req, res) => {
@@ -174,7 +180,7 @@ app.get("/api/menu", (req, res) => {
   });
 });
 
-// QR Gen
+// QR Code Generator
 app.post("/api/generate-qr", (req, res) => {
   const amount = parseFloat(req.body.amount);
   if (!amount || amount <= 0) return res.json({ status: "error" });
@@ -185,13 +191,15 @@ app.post("/api/generate-qr", (req, res) => {
   });
 });
 
-// Admin Helper: Emit 'menu_updated' ทุกครั้งที่มีการเปลี่ยนแปลง
+// --- Admin APIs ---
+
+// Helper: Run SQL & Broadcast Menu Update
 const adminRun = (sql, params, res) =>
   db.run(sql, params, (err) => {
     if (err)
       return res.json({ status: "error", message: err ? err.message : "" });
     res.json({ status: "success" });
-    io.emit("menu_updated"); // 🔥 แจ้งเตือนทุกเครื่องให้โหลดเมนูใหม่
+    io.emit("menu_updated"); // แจ้งเตือนทุกเครื่องให้โหลดเมนูใหม่
   });
 
 // Flavors
@@ -210,9 +218,7 @@ app.post("/api/admin/flavor/delete", (req, res) =>
   )
 );
 
-// Toppings (Updated for Image URL)
-// 🔥 แก้ไข API นี้ให้รับ img_url
-// Toppings
+// Toppings (Add & Update & Delete)
 app.post("/api/admin/topping/add", (req, res) =>
   adminRun(
     "INSERT INTO toppings (name, price, img_url) VALUES (?, ?, ?)",
@@ -220,15 +226,6 @@ app.post("/api/admin/topping/add", (req, res) =>
     res
   )
 );
-app.post("/api/admin/topping/delete", (req, res) =>
-  adminRun(
-    "UPDATE toppings SET is_available = 0 WHERE id = ?",
-    [req.body.id],
-    res
-  )
-);
-
-// 🔥 เพิ่ม API นี้เข้าไปครับ: สำหรับอัปเดตข้อมูล Topping
 app.post("/api/admin/topping/update", (req, res) => {
   const { id, name, price, img_url } = req.body;
   adminRun(
@@ -237,6 +234,13 @@ app.post("/api/admin/topping/update", (req, res) => {
     res
   );
 });
+app.post("/api/admin/topping/delete", (req, res) =>
+  adminRun(
+    "UPDATE toppings SET is_available = 0 WHERE id = ?",
+    [req.body.id],
+    res
+  )
+);
 
 // Categories
 app.post("/api/admin/category/add", (req, res) => {
@@ -263,16 +267,25 @@ app.post("/api/admin/category/delete", (req, res) =>
   )
 );
 
-// --- Socket.io ---
+// --- Socket.io Real-time Logic ---
+
+// Helper: Broadcast Updates to Staff & Global Status
+function broadcastUpdate() {
+  io.emit("force_refresh_staff"); // สั่งหน้า Staff ให้รีเฟรชข้อมูล
+  io.emit("order_status_changed_global"); // สั่งหน้า Tracking (ถ้ามี)
+}
+
 io.on("connection", (socket) => {
-  // Send Stock
+  // Send Stock on Connect
   db.all("SELECT * FROM stock", [], (err, rows) => {
     const stockMap = {};
     if (rows) rows.forEach((r) => (stockMap[r.item_id] = r.is_available === 1));
     socket.emit("stock_update", stockMap);
   });
 
-  // Orders
+  // --- Order Logic ---
+
+  // Load Pending Orders
   socket.on("request_pending_orders", () => {
     db.all("SELECT * FROM orders WHERE status = 'pending'", [], (err, rows) => {
       if (!err)
@@ -283,6 +296,7 @@ io.on("connection", (socket) => {
     });
   });
 
+  // Place Order
   socket.on("place_order", (orderData, callback) => {
     const time = new Date().toLocaleTimeString("th-TH");
     const itemsString = JSON.stringify(orderData.items);
@@ -301,38 +315,52 @@ io.on("connection", (socket) => {
           if (callback) callback({ status: "error" });
           return;
         }
+
+        // แจ้งเตือนออเดอร์ใหม่ + สั่งรีเฟรช
         io.emit("new_order_notification", {
           id: this.lastID,
           ...orderData,
           timestamp: time,
           status: "pending",
         });
+        broadcastUpdate();
+
         if (callback) callback({ status: "success", orderId: this.lastID });
       }
     );
   });
 
+  // Complete / Undo / Delete Order
   socket.on("complete_order", (id) => updateStatus(id, "completed"));
   socket.on("undo_order", (id) => updateStatus(id, "pending"));
+
+  socket.on("delete_order", (id) => {
+    db.run("DELETE FROM orders WHERE id = ?", [id], (err) => {
+      if (!err) broadcastUpdate();
+    });
+  });
+
+  // Edit Order Info (Table No)
+  socket.on("edit_order_info", (data) => {
+    db.run(
+      "UPDATE orders SET table_no = ? WHERE id = ?",
+      [data.table, data.id],
+      (err) => {
+        if (!err) broadcastUpdate();
+      }
+    );
+  });
 
   function updateStatus(id, status) {
     db.run("UPDATE orders SET status = ? WHERE id = ?", [status, id], (err) => {
       if (!err) {
-        db.all(
-          "SELECT * FROM orders WHERE status = 'pending'",
-          [],
-          (err, rows) => {
-            io.emit(
-              "load_current_orders",
-              rows.map((r) => ({ ...r, items: JSON.parse(r.items) }))
-            );
-          }
-        );
-        io.emit("order_status_changed", { orderId: id, status: status });
+        broadcastUpdate(); // อัปเดต Realtime ทันที
+        io.emit("order_status_changed", { orderId: id, status: status }); // แจ้งหน้าลูกค้า
       }
     });
   }
 
+  // --- Stock Logic ---
   socket.on("toggle_stock", (data) => {
     const s = data.available ? 1 : 0;
     db.run(
@@ -348,6 +376,7 @@ io.on("connection", (socket) => {
     );
   });
 
+  // --- Admin Data Logic ---
   socket.on("request_admin_data", () => {
     db.all(
       "SELECT * FROM orders WHERE status = 'completed' ORDER BY id DESC LIMIT 50",
