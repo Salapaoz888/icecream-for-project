@@ -7,6 +7,7 @@ const bodyParser = require("body-parser");
 const generatePayload = require("promptpay-qr");
 const qrcode = require("qrcode");
 
+require("dotenv").config();
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -22,7 +23,8 @@ app.use(express.static(path.join(__dirname, "public")));
 // Database Connection (ใช้ Environment Variable จาก Render)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  // ssl: { rejectUnauthorized: false } // ปลดคอมเมนต์บรรทัดนี้ถ้า Render แจ้งเตือนเรื่อง SSL
+  // 🔥 เพิ่มบรรทัดนี้: เพื่อให้เครื่องคอมเรา (Windows) เชื่อมต่อกับ Render ได้โดยไม่ติดเรื่อง Security
+  ssl: { rejectUnauthorized: false },
 });
 
 console.log("Connecting to PostgreSQL...");
